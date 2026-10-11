@@ -200,12 +200,15 @@ function leds() {
 addEventListener("online", leds); addEventListener("offline", () => { servidorOK = false; leds(); });
 leds();
 
-/* ---------- Colección global compartida: "registros" ---------- */
-let unsub = null;
+/* ---------- Ruta segura por usuario: users/{uid}/registros ---------- */
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+let unsub = null, rutaUid = null;
 
-function escucharRegistros() {
+function escucharRegistros(uid) {
   if (unsub) unsub();
-  col = collection(db, "registros"); // misma colección para navegador y app instalada
+  rutaUid = uid;
+  col = collection(db, "users", uid, "registros");
   unsub = onSnapshot(query(col, orderBy("fecha", "desc")), { includeMetadataChanges: true }, snap => {
     servidorOK = !snap.metadata.fromCache; leds();
     registros = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -215,8 +218,15 @@ function escucharRegistros() {
 
 onAuthStateChanged(auth, user => {
   autenticado = !!user; if (!user) servidorOK = false; leds();
+  // Firebase restaura la sesión anónima guardada; si no hay, crea una nueva y guardamos su uid
   if (!user) return signInAnonymously(auth).catch(e => toast("Error de autenticación: " + e.code));
-  escucharRegistros(); // la ruta ya no depende del uid; la sesión solo habilita el acceso
+  const guardado = lsGet("moto_user_id");
+  if (guardado !== user.uid) {
+    // Las reglas solo permiten leer la ruta del uid con sesión activa: un ID distinto daría permission-denied
+    if (guardado) toast("Sesión nueva: los registros anteriores no son accesibles desde aquí");
+    lsSet("moto_user_id", user.uid);
+  }
+  if (rutaUid !== user.uid) escucharRegistros(user.uid);
 });
 
 $("fecha").valueAsDate = new Date();
