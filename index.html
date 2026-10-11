@@ -14,7 +14,15 @@
 html,body{background:var(--bg);color:var(--text);font:400 16px/1.45 Barlow,system-ui,sans-serif}
 body{padding:calc(env(safe-area-inset-top) + 12px) 14px calc(env(safe-area-inset-bottom) + 84px);max-width:720px;margin:auto}
 h1,h2,.num{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700}
-h1{font-size:1.9rem;margin-bottom:12px}
+h1{font-size:1.9rem}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.leds{display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.led{display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--mute);line-height:1}
+.led i{width:9px;height:9px;border-radius:50%;background:var(--mute);flex:none}
+.led.ok i{background:var(--ok);box-shadow:0 0 6px var(--ok)}.led.ok{color:var(--text)}
+.led.cloud i{background:#4aa3ff;box-shadow:0 0 6px #4aa3ff}.led.cloud{color:var(--text)}
+.led.bad i{background:var(--bad);box-shadow:0 0 6px var(--bad)}
+.led.wait i{background:#ff8a2b;box-shadow:0 0 6px #ff8a2b}
 h2{font-size:1.3rem;margin:18px 0 10px}
 [hidden]{display:none!important}
 .view{display:none}.view.on{display:block}
@@ -54,7 +62,13 @@ button.sec{background:transparent;color:var(--mute);cursor:pointer}
 </head>
 <body>
 <div id="msg" role="status"></div>
-<h1>Bitácora Moto</h1>
+<header>
+  <h1>Bitácora Moto</h1>
+  <div class="leds" aria-live="polite">
+    <span class="led" id="ledNet"><i></i><b>…</b></span>
+    <span class="led" id="ledCloud"><i></i><b>…</b></span>
+  </div>
+</header>
 
 <section id="v-resumen" class="view on">
   <div class="grid">
@@ -159,8 +173,13 @@ const duracionTxt = (km, a, b) => {
 const toast = t => { const m = $("msg"); m.textContent = t; m.style.display = "block"; setTimeout(() => m.style.display = "none", 2200); };
 
 /* ---------- Navegación ---------- */
+const TABS = ["resumen", "nuevo", "hist"];
+const tabGuardada = () => { try { return localStorage.getItem("tab"); } catch (e) { return null; } };
+if (!TABS.includes(location.hash.slice(1)) && TABS.includes(tabGuardada())) location.hash = "#" + tabGuardada();
 function nav() {
-  const v = (location.hash || "#resumen").slice(1);
+  let v = location.hash.slice(1);
+  if (!TABS.includes(v)) v = "resumen";
+  try { localStorage.setItem("tab", v); } catch (e) {}
   document.querySelectorAll(".view").forEach(s => s.classList.toggle("on", s.id === "v-" + v));
   document.querySelectorAll(".nav a").forEach(a => a.classList.toggle("on", a.hash === "#" + v));
   scrollTo(0, 0);
@@ -168,13 +187,28 @@ function nav() {
 addEventListener("hashchange", nav); nav();
 
 /* ---------- Firebase ---------- */
+/* ---------- Testigos de estado ---------- */
+let autenticado = false, servidorOK = false;
+function leds() {
+  const online = navigator.onLine;
+  $("ledNet").className = "led " + (online ? "ok" : "bad");
+  $("ledNet").lastChild.textContent = online ? "En línea" : "Sin red";
+  const nube = online && autenticado && servidorOK;
+  $("ledCloud").className = "led " + (nube ? "cloud" : "wait");
+  $("ledCloud").lastChild.textContent = nube ? "Nube OK" : "Conectando...";
+}
+addEventListener("online", leds); addEventListener("offline", () => { servidorOK = false; leds(); });
+leds();
+
 onAuthStateChanged(auth, user => {
+  autenticado = !!user; if (!user) servidorOK = false; leds();
   if (!user) return signInAnonymously(auth).catch(e => toast("Error de autenticación: " + e.code));
   col = collection(db, "users", user.uid, "registros");
-  onSnapshot(query(col, orderBy("fecha", "desc")), snap => {
+  onSnapshot(query(col, orderBy("fecha", "desc")), { includeMetadataChanges: true }, snap => {
+    servidorOK = !snap.metadata.fromCache; leds();
     registros = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     render();
-  }, e => toast("Error al leer datos: " + e.code));
+  }, e => { servidorOK = false; leds(); toast("Error al leer datos: " + e.code); });
 });
 
 $("fecha").valueAsDate = new Date();
