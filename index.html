@@ -286,6 +286,12 @@ function render() {
   renderLista();
 }
 
+function tituloRegistro(r) { // "Otro" muestra solo el detalle; el resto, "Categoría · Detalle"
+  if (r.categoria === "Otro" && r.marca) return esc(r.marca);
+  const pos = r.posicion ? `<span class="tag">${esc(r.posicion)}</span>` : "";
+  return esc(r.categoria) + pos + (r.marca ? " · " + esc(r.marca) : "");
+}
+
 function renderLista() {
   const sel = $("fCat"), actual = sel.value;
   const cats = [...new Set(registros.map(r => r.categoria))].sort();
@@ -294,7 +300,7 @@ function renderLista() {
   const lista = registros.filter(r => (!c || r.categoria === c) && (!d || r.fecha >= d) && (!h || r.fecha <= h))
     .sort((a, b) => ordenar(b, a));
   $("list").innerHTML = lista.length ? lista.map(r => `<div class="item">
-      <span class="cat">${esc(r.categoria)}${r.posicion ? `<span class="tag">${esc(r.posicion)}</span>` : ""}${r.marca ? " · " + esc(r.marca) : ""}</span><span class="val">${money(totalDe(r))}</span>
+      <span class="cat">${tituloRegistro(r)}</span><span class="val">${money(totalDe(r))}</span>
       <small>${fechaFmt(r.fecha)} · ${kmFmt(r.km)}${r.mano ? `<br>Repuesto ${money(r.valor)} + Mano de obra ${money(r.mano)}` : ""}${r.notas ? "<br>" + esc(r.notas) : ""}</small>
       <div class="acts"><button class="ghost edit" data-edit="${r.id}" aria-label="Editar registro">Editar</button><button class="ghost" data-del="${r.id}" aria-label="Eliminar registro">Eliminar</button></div></div>`).join("")
     : `<p class="empty">No hay registros con estos filtros.</p>`;
