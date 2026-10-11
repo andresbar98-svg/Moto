@@ -200,30 +200,23 @@ function leds() {
 addEventListener("online", leds); addEventListener("offline", () => { servidorOK = false; leds(); });
 leds();
 
-/* ---------- Sesión: moto_user_id guardado en localStorage ---------- */
-const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
-const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
-let userId = lsGet("moto_user_id"), unsub = null;
+/* ---------- Colección global compartida: "registros" ---------- */
+let unsub = null;
 
-function escucharRegistros(uid) {
+function escucharRegistros() {
   if (unsub) unsub();
-  col = collection(db, "users", uid, "registros");
+  col = collection(db, "registros"); // misma colección para navegador y app instalada
   unsub = onSnapshot(query(col, orderBy("fecha", "desc")), { includeMetadataChanges: true }, snap => {
     servidorOK = !snap.metadata.fromCache; leds();
     registros = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     render();
-  }, e => {
-    servidorOK = false; leds();
-    toast(e.code === "permission-denied" && auth.currentUser && auth.currentUser.uid !== uid
-      ? "La sesión no coincide con el ID guardado" : "Error al leer datos: " + e.code);
-  });
+  }, e => { servidorOK = false; leds(); toast("Error al leer datos: " + e.code); });
 }
 
 onAuthStateChanged(auth, user => {
   autenticado = !!user; if (!user) servidorOK = false; leds();
   if (!user) return signInAnonymously(auth).catch(e => toast("Error de autenticación: " + e.code));
-  if (!userId) { userId = user.uid; lsSet("moto_user_id", userId); } // primer uso: guarda el uid anónimo
-  escucharRegistros(userId);                                         // siguientes: usa el ID guardado
+  escucharRegistros(); // la ruta ya no depende del uid; la sesión solo habilita el acceso
 });
 
 $("fecha").valueAsDate = new Date();
